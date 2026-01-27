@@ -64,12 +64,23 @@ exchange_filter = st.multiselect(
     default=["TSX", "TSXV", "CSE"]
 )
 
-price_max = st.number_input(
-    "Prix maximum ($)",
-    min_value=0.0,
-    value=10.0,
-    step=0.5
-)
+col1, col2 = st.columns(2)
+
+with col1:
+    price_min = st.number_input(
+        "Prix minimum ($)",
+        min_value=0.0,
+        value=0.0,
+        step=0.1
+    )
+
+with col2:
+    price_max = st.number_input(
+        "Prix maximum ($)",
+        min_value=0.0,
+        value=10.0,
+        step=0.5
+    )
 
 run = st.button("🚀 Lancer le scan")
 
@@ -89,7 +100,7 @@ if run:
             yticker = yahoo_ticker(row["Ticker"], row["Exchange"])
             metrics = compute_returns(yticker)
 
-            if metrics and metrics["Price"] <= price_max:
+            if metrics and price_min <= metrics["Price"] <= price_max:
                 results.append({
                     "Ticker": row["Ticker"],
                     "Company": row["Company"],
