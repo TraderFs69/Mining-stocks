@@ -1,12 +1,11 @@
-st.subheader("🧪 Test Yahoo Finance direct")
-
-test = yf.download("AEM.TO", period="1mo", progress=False)
-st.write(test.head())
-
 import streamlit as st
 import pandas as pd
 import yfinance as yf
 
+st.subheader("🧪 Test Yahoo Finance direct")
+
+test = yf.download("AEM.TO", period="1mo", progress=False)
+st.write(test.head())
 st.set_page_config(page_title="Scanner Minières", layout="wide")
 
 # ======================
