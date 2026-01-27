@@ -2,21 +2,29 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 
-st.subheader("🧪 Test Yahoo Finance direct")
-
-test = yf.download("AEM.TO", period="1mo", progress=False)
-st.write(test.head())
 st.set_page_config(page_title="Scanner Minières", layout="wide")
 
 # ======================
 # FONCTIONS
 # ======================
 
+def clean_ticker(ticker: str) -> str:
+    """Nettoyage agressif du ticker (espaces, caractères invisibles)"""
+    return (
+        str(ticker)
+        .upper()
+        .strip()
+        .replace(" ", "")
+        .replace("\u00a0", "")
+        .replace("\t", "")
+    )
+
+
 def yahoo_ticker(ticker, exchange):
-    ticker = str(ticker).upper().strip()
+    ticker = clean_ticker(ticker)
     exchange = str(exchange).upper().strip()
 
-    # 🔥 IMPORTANT : si suffixe déjà présent, on ne touche à rien
+    # Si le ticker contient déjà un suffixe Yahoo, on ne touche à rien
     if "." in ticker:
         return ticker
 
@@ -36,8 +44,8 @@ def compute_returns(ticker):
         data = yf.download(
             ticker,
             period="1y",
-            auto_adjust=True,   # 🔥 CRITIQUE
-            threads=False,      # 🔥 CRITIQUE POUR STREAMLIT CLOUD
+            auto_adjust=True,
+            threads=False,      # important pour Streamlit Cloud
             progress=False
         )
 
@@ -77,6 +85,7 @@ st.title("⛏️ Scanner des minières canadiennes")
 
 file = "Stock Minier.xlsx"
 
+# Lecture des secteurs depuis les onglets Excel
 xls = pd.ExcelFile(file)
 secteurs = xls.sheet_names
 secteur = st.selectbox("Secteur", secteurs)
@@ -102,29 +111,28 @@ run = st.button("🚀 Lancer le scan")
 # ======================
 
 if run:
-    with st.spinner("Téléchargement Yahoo Finance (mode Cloud-safe)..."):
+    with st.spinner("Téléchargement des données Yahoo Finance..."):
 
         df = pd.read_excel(file, sheet_name=secteur)
 
         # Normalisation Excel
         df["Exchange"] = df["Exchange"].astype(str).str.upper().str.strip()
-        df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
+        df["Ticker"] = df["Ticker"].astype(str)
 
         df = df[df["Exchange"].isin(exchange_filter)]
 
-        st.info(f"🔍 {len(df)} tickers analysés")
-
         results = []
+        ignored = 0
 
         for _, row in df.iterrows():
             yticker = yahoo_ticker(row["Ticker"], row["Exchange"])
             metrics = compute_returns(yticker)
 
-            if (
-                metrics
-                and pd.notna(metrics["Price"])
-                and price_min <= metrics["Price"] <= price_max
-            ):
+            if metrics is None:
+                ignored += 1
+                continue
+
+            if price_min <= metrics["Price"] <= price_max:
                 results.append({
                     "Ticker": yticker,
                     "Company": row["Company"],
@@ -136,6 +144,10 @@ if run:
         if results:
             res_df = pd.DataFrame(results).sort_values("1Y %", ascending=False)
             st.success(f"✅ {len(res_df)} actions trouvées")
+            st.caption(f"ℹ️ {ignored} titres ignorés (non disponibles sur Yahoo Finance)")
             st.dataframe(res_df, use_container_width=True)
         else:
-            st.error("❌ Yahoo Finance n’a retourné aucune donnée valide")
+            st.warning(
+                f"Aucun stock ne respecte les critères "
+                f"({ignored} titres ignorés car absents de Yahoo Finance)"
+            )
