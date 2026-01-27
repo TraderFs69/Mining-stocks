@@ -24,10 +24,16 @@ def compute_returns(ticker):
     try:
         data = yf.download(ticker, period="1y", progress=False)
 
-        if data.empty or "Close" not in data:
+        if data.empty:
             return None
 
-        close = data["Close"]
+        # Utiliser Adj Close si disponible
+        price_col = "Adj Close" if "Adj Close" in data.columns else "Close"
+        close = data[price_col].dropna()
+
+        if close.empty:
+            return None
+
         last = close.iloc[-1]
 
         def ret(days):
@@ -86,8 +92,8 @@ with col2:
     price_max = st.number_input(
         "Prix maximum ($)",
         min_value=0.0,
-        value=10.0,
-        step=0.5
+        value=1000.0,
+        step=10.0
     )
 
 run = st.button("🚀 Lancer le scan")
@@ -108,7 +114,11 @@ if run:
             yticker = yahoo_ticker(row["Ticker"], row["Exchange"])
             metrics = compute_returns(yticker)
 
-            if metrics and price_min <= metrics["Price"] <= price_max:
+            if (
+                metrics
+                and pd.notna(metrics["Price"])
+                and price_min <= metrics["Price"] <= price_max
+            ):
                 results.append({
                     "Ticker": row["Ticker"],
                     "Company": row["Company"],
