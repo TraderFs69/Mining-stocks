@@ -1,6 +1,8 @@
-# ======================
-# INTERFACE
-# ======================
+import streamlit as st
+import pandas as pd
+import yfinance as yf
+
+st.set_page_config(page_title="Scanner Minières", layout="wide")
 
 st.title("⛏️ Scanner des minières canadiennes")
 
