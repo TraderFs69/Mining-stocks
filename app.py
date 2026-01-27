@@ -39,6 +39,12 @@ def color_pct(x):
     return "color: #999999"
 
 
+def format_price(x):
+    if pd.isna(x):
+        return ""
+    return f"{x:.2f}"
+
+
 # ======================
 # YAHOO HELPERS
 # ======================
@@ -172,7 +178,9 @@ if run:
 
             styled_df = (
                 res_df.style
-                .format({c: format_pct for c in pct_cols})
+                .format(
+                    {"Price": format_price, **{c: format_pct for c in pct_cols}}
+                )
                 .applymap(color_pct, subset=pct_cols)
             )
 
