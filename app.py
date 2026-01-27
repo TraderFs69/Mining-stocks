@@ -27,7 +27,6 @@ def compute_returns(ticker):
         if data.empty:
             return None
 
-        # Utiliser Adj Close si disponible
         price_col = "Adj Close" if "Adj Close" in data.columns else "Close"
         close = data[price_col].dropna()
 
@@ -63,14 +62,11 @@ st.title("⛏️ Scanner des minières canadiennes")
 
 file = "Stock Minier.xlsx"
 
-# Lecture automatique des secteurs depuis les onglets
+# Lecture automatique des secteurs (onglets Excel)
 xls = pd.ExcelFile(file)
 secteurs = xls.sheet_names
 
-secteur = st.selectbox(
-    "Secteur",
-    secteurs
-)
+secteur = st.selectbox("Secteur", secteurs)
 
 exchange_filter = st.multiselect(
     "Exchange",
@@ -106,6 +102,10 @@ if run:
     with st.spinner("Téléchargement des données Yahoo Finance..."):
 
         df = pd.read_excel(file, sheet_name=secteur)
+
+        # 🔥 CORRECTION CRITIQUE : normalisation Exchange
+        df["Exchange"] = df["Exchange"].astype(str).str.upper().str.strip()
+
         df = df[df["Exchange"].isin(exchange_filter)]
 
         results = []
