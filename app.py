@@ -5,8 +5,12 @@ import yfinance as yf
 st.set_page_config(page_title="Scanner Minières", layout="wide")
 
 # ======================
-# FONCTIONS
+# UTILITAIRES
 # ======================
+
+def safe_round(x, n=2):
+    return round(x, n) if x is not None else None
+
 
 def clean_ticker(ticker: str) -> str:
     return (
@@ -19,12 +23,12 @@ def clean_ticker(ticker: str) -> str:
     )
 
 
+# ======================
+# YAHOO HELPERS
+# ======================
+
 @st.cache_data(show_spinner=False)
 def try_yahoo_variants(base_ticker):
-    """
-    Essaie plusieurs variantes Yahoo et retourne
-    (ticker_valide, dataframe) ou (None, None)
-    """
     variants = [
         f"{base_ticker}.TO",
         f"{base_ticker}.V",
@@ -67,13 +71,13 @@ def compute_returns(base_ticker):
         return None
 
     metrics = {
-        "Price": round(last, 2),
-        "1D %": round(ret(1), 2),
-        "1W %": round(ret(5), 2),
-        "1M %": round(ret(21), 2),
-        "3M %": round(ret(63), 2),
-        "6M %": round(ret(126), 2),
-        "1Y %": round(ret(252), 2),
+        "Price": safe_round(last),
+        "1D %": safe_round(ret(1)),
+        "1W %": safe_round(ret(5)),
+        "1M %": safe_round(ret(21)),
+        "3M %": safe_round(ret(63)),
+        "6M %": safe_round(ret(126)),
+        "1Y %": safe_round(ret(252)),
     }
 
     return yticker, metrics
@@ -131,7 +135,9 @@ if run:
                 })
 
         if results:
-            res_df = pd.DataFrame(results).sort_values("1Y %", ascending=False)
+            res_df = pd.DataFrame(results).sort_values(
+                "1Y %", ascending=False, na_position="last"
+            )
             st.success(f"✅ {len(res_df)} actions trouvées")
             st.caption(f"ℹ️ {ignored} titres ignorés (non disponibles sur Yahoo Finance)")
             st.dataframe(res_df, use_container_width=True)
