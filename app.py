@@ -141,7 +141,12 @@ if run:
                 })
 
         if results:
-            res_df = pd.DataFrame(results).sort_values(
+            res_df = pd.DataFrame(results)
+
+            # 🔥 CORRECTION DÉFINITIVE : forcer Y en numérique avant tri
+            res_df["Y"] = pd.to_numeric(res_df["Y"], errors="coerce")
+
+            res_df = res_df.sort_values(
                 "Y", ascending=False, na_position="last"
             )
 
