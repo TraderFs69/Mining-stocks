@@ -9,7 +9,16 @@ st.set_page_config(page_title="Scanner Minières", layout="wide")
 # ======================
 
 def yahoo_ticker(ticker, exchange):
-    exchange = exchange.upper().strip()
+    """
+    - Si le ticker contient déjà un suffixe (.TO, .V, .CN), on le garde tel quel
+    - Sinon on ajoute le suffixe selon l'exchange
+    """
+    ticker = str(ticker).upper().strip()
+    exchange = str(exchange).upper().strip()
+
+    # 🔥 CORRECTION CLÉ : ticker déjà Yahoo
+    if "." in ticker:
+        return ticker
 
     if exchange == "TSX":
         return f"{ticker}.TO"
@@ -17,23 +26,28 @@ def yahoo_ticker(ticker, exchange):
         return f"{ticker}.V"
     elif exchange == "CSE":
         return f"{ticker}.CN"
+
     return ticker
 
 
 def compute_returns(ticker):
     try:
-        data = yf.download(ticker, period="1y", progress=False)
+        data = yf.download(
+            ticker,
+            period="1y",
+            auto_adjust=True,
+            progress=False,
+            threads=False
+        )
 
         if data.empty:
             return None
 
-        price_col = "Adj Close" if "Adj Close" in data.columns else "Close"
-        close = data[price_col].dropna()
-
+        close = data["Close"].dropna()
         if close.empty:
             return None
 
-        last = close.iloc[-1]
+        last = float(close.iloc[-1])
 
         def ret(days):
             if len(close) > days:
@@ -41,7 +55,7 @@ def compute_returns(ticker):
             return None
 
         return {
-            "Price": round(float(last), 2),
+            "Price": round(last, 2),
             "1D %": round(ret(1), 2),
             "1W %": round(ret(5), 2),
             "1M %": round(ret(21), 2),
@@ -62,10 +76,8 @@ st.title("⛏️ Scanner des minières canadiennes")
 
 file = "Stock Minier.xlsx"
 
-# Lecture automatique des secteurs (onglets Excel)
 xls = pd.ExcelFile(file)
 secteurs = xls.sheet_names
-
 secteur = st.selectbox("Secteur", secteurs)
 
 exchange_filter = st.multiselect(
@@ -103,10 +115,13 @@ if run:
 
         df = pd.read_excel(file, sheet_name=secteur)
 
-        # 🔥 CORRECTION CRITIQUE : normalisation Exchange
+        # 🔥 Normalisation critique
         df["Exchange"] = df["Exchange"].astype(str).str.upper().str.strip()
+        df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
 
         df = df[df["Exchange"].isin(exchange_filter)]
+
+        st.info(f"🔍 {len(df)} tickers analysés")
 
         results = []
 
@@ -120,7 +135,7 @@ if run:
                 and price_min <= metrics["Price"] <= price_max
             ):
                 results.append({
-                    "Ticker": row["Ticker"],
+                    "Ticker": yticker,
                     "Company": row["Company"],
                     "Exchange": row["Exchange"],
                     "Secteur": secteur,
@@ -128,10 +143,8 @@ if run:
                 })
 
         if results:
-            res_df = pd.DataFrame(results)
-            res_df = res_df.sort_values("1Y %", ascending=False)
-
-            st.success(f"{len(res_df)} actions trouvées")
+            res_df = pd.DataFrame(results).sort_values("1Y %", ascending=False)
+            st.success(f"✅ {len(res_df)} actions trouvées")
             st.dataframe(res_df, use_container_width=True)
         else:
-            st.warning("Aucun stock ne respecte les critères")
+            st.error("❌ Aucun stock valide (Yahoo ne retourne rien)")
