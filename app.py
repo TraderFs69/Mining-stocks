@@ -23,6 +23,22 @@ def clean_ticker(ticker: str) -> str:
     )
 
 
+def format_pct(x):
+    if pd.isna(x):
+        return ""
+    return f"{x:.2f} %"
+
+
+def color_pct(x):
+    if pd.isna(x):
+        return "color: #999999"
+    if x > 0:
+        return "color: #1a7f37; font-weight: 600"   # vert
+    if x < 0:
+        return "color: #b42318; font-weight: 600"   # rouge
+    return "color: #999999"
+
+
 # ======================
 # YAHOO HELPERS
 # ======================
@@ -67,14 +83,13 @@ def compute_returns(base_ticker):
 
     def ret(days):
         if len(close) > days:
-            return (last / close.iloc[-days - 1] - 1) * 100
+            return float((last / float(close.iloc[-days - 1]) - 1) * 100)
         return None
 
-    # 🔥 Rendement annuel intelligent
     if len(close) >= 252:
         y_ret = ret(252)
     else:
-        y_ret = (last / close.iloc[0] - 1) * 100
+        y_ret = float((last / float(close.iloc[0]) - 1) * 100)
 
     metrics = {
         "Price": safe_round(last),
@@ -143,7 +158,7 @@ if run:
         if results:
             res_df = pd.DataFrame(results)
 
-            # 🔥 CORRECTION DÉFINITIVE : forcer Y en numérique avant tri
+            # Forcer Y en numérique pour tri stable
             res_df["Y"] = pd.to_numeric(res_df["Y"], errors="coerce")
 
             res_df = res_df.sort_values(
@@ -152,7 +167,16 @@ if run:
 
             st.success(f"✅ {len(res_df)} actions trouvées")
             st.caption(f"ℹ️ {ignored} titres ignorés (non disponibles sur Yahoo Finance)")
-            st.dataframe(res_df, use_container_width=True)
+
+            pct_cols = ["D", "W", "M", "3M", "6M", "Y"]
+
+            styled_df = (
+                res_df.style
+                .format({c: format_pct for c in pct_cols})
+                .applymap(color_pct, subset=pct_cols)
+            )
+
+            st.dataframe(styled_df, use_container_width=True)
 
         else:
             st.warning(
