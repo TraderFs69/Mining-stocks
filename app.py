@@ -9,7 +9,6 @@ st.set_page_config(page_title="Scanner Minières", layout="wide")
 # ======================
 
 def clean_ticker(ticker: str) -> str:
-    """Nettoyage agressif du ticker (espaces, caractères invisibles)"""
     return (
         str(ticker)
         .upper()
@@ -20,61 +19,64 @@ def clean_ticker(ticker: str) -> str:
     )
 
 
-def yahoo_ticker(ticker, exchange):
-    ticker = clean_ticker(ticker)
-    exchange = str(exchange).upper().strip()
-
-    # Si le ticker contient déjà un suffixe Yahoo, on ne touche à rien
-    if "." in ticker:
-        return ticker
-
-    if exchange == "TSX":
-        return f"{ticker}.TO"
-    elif exchange == "TSX.V":
-        return f"{ticker}.V"
-    elif exchange == "CSE":
-        return f"{ticker}.CN"
-
-    return ticker
-
-
 @st.cache_data(show_spinner=False)
-def compute_returns(ticker):
-    try:
-        data = yf.download(
-            ticker,
-            period="1y",
-            auto_adjust=True,
-            threads=False,      # important pour Streamlit Cloud
-            progress=False
-        )
+def try_yahoo_variants(base_ticker):
+    """
+    Essaie plusieurs variantes Yahoo et retourne
+    (ticker_valide, dataframe) ou (None, None)
+    """
+    variants = [
+        f"{base_ticker}.TO",
+        f"{base_ticker}.V",
+        f"{base_ticker}.CN",
+        base_ticker
+    ]
 
-        if data.empty:
-            return None
+    for t in variants:
+        try:
+            data = yf.download(
+                t,
+                period="1y",
+                auto_adjust=True,
+                threads=False,
+                progress=False
+            )
+            if not data.empty:
+                return t, data
+        except Exception:
+            continue
 
-        close = data["Close"].dropna()
-        if close.empty:
-            return None
+    return None, None
 
-        last = float(close.iloc[-1])
 
-        def ret(days):
-            if len(close) > days:
-                return (last / close.iloc[-days - 1] - 1) * 100
-            return None
+def compute_returns(base_ticker):
+    yticker, data = try_yahoo_variants(base_ticker)
 
-        return {
-            "Price": round(last, 2),
-            "1D %": round(ret(1), 2),
-            "1W %": round(ret(5), 2),
-            "1M %": round(ret(21), 2),
-            "3M %": round(ret(63), 2),
-            "6M %": round(ret(126), 2),
-            "1Y %": round(ret(252), 2),
-        }
+    if yticker is None or data is None:
+        return None, None
 
-    except Exception:
+    close = data["Close"].dropna()
+    if close.empty:
+        return None, None
+
+    last = float(close.iloc[-1])
+
+    def ret(days):
+        if len(close) > days:
+            return (last / close.iloc[-days - 1] - 1) * 100
         return None
+
+    metrics = {
+        "Price": round(last, 2),
+        "1D %": round(ret(1), 2),
+        "1W %": round(ret(5), 2),
+        "1M %": round(ret(21), 2),
+        "3M %": round(ret(63), 2),
+        "6M %": round(ret(126), 2),
+        "1Y %": round(ret(252), 2),
+    }
+
+    return yticker, metrics
 
 
 # ======================
@@ -85,16 +87,9 @@ st.title("⛏️ Scanner des minières canadiennes")
 
 file = "Stock Minier.xlsx"
 
-# Lecture des secteurs depuis les onglets Excel
 xls = pd.ExcelFile(file)
 secteurs = xls.sheet_names
 secteur = st.selectbox("Secteur", secteurs)
-
-exchange_filter = st.multiselect(
-    "Exchange",
-    ["TSX", "TSX.V", "CSE"],
-    default=["TSX", "TSX.V", "CSE"]
-)
 
 col1, col2 = st.columns(2)
 
@@ -111,22 +106,17 @@ run = st.button("🚀 Lancer le scan")
 # ======================
 
 if run:
-    with st.spinner("Téléchargement des données Yahoo Finance..."):
+    with st.spinner("Scan Yahoo Finance (multi-suffixes)..."):
 
         df = pd.read_excel(file, sheet_name=secteur)
-
-        # Normalisation Excel
-        df["Exchange"] = df["Exchange"].astype(str).str.upper().str.strip()
         df["Ticker"] = df["Ticker"].astype(str)
-
-        df = df[df["Exchange"].isin(exchange_filter)]
 
         results = []
         ignored = 0
 
         for _, row in df.iterrows():
-            yticker = yahoo_ticker(row["Ticker"], row["Exchange"])
-            metrics = compute_returns(yticker)
+            base = clean_ticker(row["Ticker"])
+            yticker, metrics = compute_returns(base)
 
             if metrics is None:
                 ignored += 1
@@ -136,7 +126,6 @@ if run:
                 results.append({
                     "Ticker": yticker,
                     "Company": row["Company"],
-                    "Exchange": row["Exchange"],
                     "Secteur": secteur,
                     **metrics
                 })
