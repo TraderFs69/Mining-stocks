@@ -9,14 +9,10 @@ st.set_page_config(page_title="Scanner Minières", layout="wide")
 # ======================
 
 def yahoo_ticker(ticker, exchange):
-    """
-    - Si le ticker contient déjà un suffixe (.TO, .V, .CN), on le garde tel quel
-    - Sinon on ajoute le suffixe selon l'exchange
-    """
     ticker = str(ticker).upper().strip()
     exchange = str(exchange).upper().strip()
 
-    # 🔥 CORRECTION CLÉ : ticker déjà Yahoo
+    # 🔥 IMPORTANT : si suffixe déjà présent, on ne touche à rien
     if "." in ticker:
         return ticker
 
@@ -30,14 +26,15 @@ def yahoo_ticker(ticker, exchange):
     return ticker
 
 
+@st.cache_data(show_spinner=False)
 def compute_returns(ticker):
     try:
         data = yf.download(
             ticker,
             period="1y",
-            auto_adjust=True,
-            progress=False,
-            threads=False
+            auto_adjust=True,   # 🔥 CRITIQUE
+            threads=False,      # 🔥 CRITIQUE POUR STREAMLIT CLOUD
+            progress=False
         )
 
         if data.empty:
@@ -89,20 +86,10 @@ exchange_filter = st.multiselect(
 col1, col2 = st.columns(2)
 
 with col1:
-    price_min = st.number_input(
-        "Prix minimum ($)",
-        min_value=0.0,
-        value=0.0,
-        step=0.1
-    )
+    price_min = st.number_input("Prix minimum ($)", 0.0, 1000.0, 0.0, 0.1)
 
 with col2:
-    price_max = st.number_input(
-        "Prix maximum ($)",
-        min_value=0.0,
-        value=1000.0,
-        step=10.0
-    )
+    price_max = st.number_input("Prix maximum ($)", 0.0, 1000.0, 1000.0, 10.0)
 
 run = st.button("🚀 Lancer le scan")
 
@@ -111,11 +98,11 @@ run = st.button("🚀 Lancer le scan")
 # ======================
 
 if run:
-    with st.spinner("Téléchargement des données Yahoo Finance..."):
+    with st.spinner("Téléchargement Yahoo Finance (mode Cloud-safe)..."):
 
         df = pd.read_excel(file, sheet_name=secteur)
 
-        # 🔥 Normalisation critique
+        # Normalisation Excel
         df["Exchange"] = df["Exchange"].astype(str).str.upper().str.strip()
         df["Ticker"] = df["Ticker"].astype(str).str.upper().str.strip()
 
@@ -147,4 +134,4 @@ if run:
             st.success(f"✅ {len(res_df)} actions trouvées")
             st.dataframe(res_df, use_container_width=True)
         else:
-            st.error("❌ Aucun stock valide (Yahoo ne retourne rien)")
+            st.error("❌ Yahoo Finance n’a retourné aucune donnée valide")
