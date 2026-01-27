@@ -70,14 +70,20 @@ def compute_returns(base_ticker):
             return (last / close.iloc[-days - 1] - 1) * 100
         return None
 
+    # 🔥 Rendement annuel intelligent
+    if len(close) >= 252:
+        y_ret = ret(252)
+    else:
+        y_ret = (last / close.iloc[0] - 1) * 100
+
     metrics = {
         "Price": safe_round(last),
-        "1D %": safe_round(ret(1)),
-        "1W %": safe_round(ret(5)),
-        "1M %": safe_round(ret(21)),
-        "3M %": safe_round(ret(63)),
-        "6M %": safe_round(ret(126)),
-        "1Y %": safe_round(ret(252)),
+        "D": safe_round(ret(1)),
+        "W": safe_round(ret(5)),
+        "M": safe_round(ret(21)),
+        "3M": safe_round(ret(63)),
+        "6M": safe_round(ret(126)),
+        "Y": safe_round(y_ret),
     }
 
     return yticker, metrics
@@ -110,7 +116,7 @@ run = st.button("🚀 Lancer le scan")
 # ======================
 
 if run:
-    with st.spinner("Scan Yahoo Finance (multi-suffixes)..."):
+    with st.spinner("Scan Yahoo Finance..."):
 
         df = pd.read_excel(file, sheet_name=secteur)
         df["Ticker"] = df["Ticker"].astype(str)
@@ -136,11 +142,13 @@ if run:
 
         if results:
             res_df = pd.DataFrame(results).sort_values(
-                "1Y %", ascending=False, na_position="last"
+                "Y", ascending=False, na_position="last"
             )
+
             st.success(f"✅ {len(res_df)} actions trouvées")
             st.caption(f"ℹ️ {ignored} titres ignorés (non disponibles sur Yahoo Finance)")
             st.dataframe(res_df, use_container_width=True)
+
         else:
             st.warning(
                 f"Aucun stock ne respecte les critères "
