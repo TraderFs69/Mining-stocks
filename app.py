@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 import yfinance as yf
+import time
+from yfinance.exceptions import YFRateLimitError
 
 st.set_page_config(page_title="Scanner Minières", layout="wide")
 
@@ -33,9 +35,9 @@ def color_pct(x):
     if pd.isna(x):
         return "color: #999999"
     if x > 0:
-        return "color: #1a7f37; font-weight: 600"   # vert
+        return "color: #1a7f37; font-weight: 600"
     if x < 0:
-        return "color: #b42318; font-weight: 600"   # rouge
+        return "color: #b42318; font-weight: 600"
     return "color: #999999"
 
 
@@ -46,16 +48,15 @@ def format_price(x):
 
 
 # ======================
-# YAHOO HELPERS
+# YAHOO HELPERS (SAFE)
 # ======================
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=6 * 3600)  # 6 heures de cache
 def try_yahoo_variants(base_ticker):
     variants = [
-        f"{base_ticker}.TO",
-        f"{base_ticker}.V",
-        f"{base_ticker}.CN",
-        base_ticker
+        f"{base_ticker}.TO",  # TSX d'abord (plus stable)
+        f"{base_ticker}.V",   # TSXV ensuite
+        base_ticker           # fallback
     ]
 
     for t in variants:
@@ -69,6 +70,12 @@ def try_yahoo_variants(base_ticker):
             )
             if not data.empty:
                 return t, data
+
+        except YFRateLimitError:
+            # STOP immédiat pour éviter un ban plus long
+            time.sleep(15)
+            return None, None
+
         except Exception:
             continue
 
@@ -137,7 +144,7 @@ run = st.button("🚀 Lancer le scan")
 # ======================
 
 if run:
-    with st.spinner("Scan Yahoo Finance..."):
+    with st.spinner("Scan Yahoo Finance (mode SAFE)..."):
 
         df = pd.read_excel(file, sheet_name=secteur)
         df["Ticker"] = df["Ticker"].astype(str)
@@ -145,21 +152,31 @@ if run:
         results = []
         ignored = 0
 
-        for _, row in df.iterrows():
+        progress = st.progress(0)
+        total = len(df)
+
+        for i, (_, row) in enumerate(df.iterrows(), start=1):
             base = clean_ticker(row["Ticker"])
             yticker, metrics = compute_returns(base)
 
+            # Ralentissement INTELLIGENT : seulement si Yahoo a répondu
+            if yticker is not None:
+                time.sleep(1.2)
+
             if metrics is None:
                 ignored += 1
-                continue
+            else:
+                if price_min <= metrics["Price"] <= price_max:
+                    results.append({
+                        "Ticker": yticker,
+                        "Company": row["Company"],
+                        "Secteur": secteur,
+                        **metrics
+                    })
 
-            if price_min <= metrics["Price"] <= price_max:
-                results.append({
-                    "Ticker": yticker,
-                    "Company": row["Company"],
-                    "Secteur": secteur,
-                    **metrics
-                })
+            progress.progress(i / total)
+
+        progress.empty()
 
         if results:
             res_df = pd.DataFrame(results)
@@ -172,7 +189,7 @@ if run:
             )
 
             st.success(f"✅ {len(res_df)} actions trouvées")
-            st.caption(f"ℹ️ {ignored} titres ignorés (non disponibles sur Yahoo Finance)")
+            st.caption(f"ℹ️ {ignored} titres ignorés (non disponibles ou bloqués par Yahoo)")
 
             pct_cols = ["D", "W", "M", "3M", "6M", "Y"]
 
@@ -189,5 +206,5 @@ if run:
         else:
             st.warning(
                 f"Aucun stock ne respecte les critères "
-                f"({ignored} titres ignorés car absents de Yahoo Finance)"
+                f"({ignored} titres ignorés)"
             )
