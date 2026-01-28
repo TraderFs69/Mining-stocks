@@ -85,17 +85,17 @@ def compute_returns(base_ticker):
     if close.empty:
         return None, None
 
-    last = float(close.iloc[-1])
+    last = close.iloc[-1].item()
 
     def ret(days):
         if len(close) > days:
-            return float((last / float(close.iloc[-days - 1]) - 1) * 100)
+            return (last / close.iloc[-days - 1].item() - 1) * 100
         return None
 
     if len(close) >= 252:
         y_ret = ret(252)
     else:
-        y_ret = float((last / float(close.iloc[0]) - 1) * 100)
+        y_ret = (last / close.iloc[0].item() - 1) * 100
 
     metrics = {
         "Price": safe_round(last),
@@ -181,10 +181,10 @@ if run:
                 .format(
                     {"Price": format_price, **{c: format_pct for c in pct_cols}}
                 )
-                .applymap(color_pct, subset=pct_cols)
+                .map(color_pct, subset=pct_cols)
             )
 
-            st.dataframe(styled_df, use_container_width=True)
+            st.dataframe(styled_df, width="stretch")
 
         else:
             st.warning(
