@@ -68,6 +68,7 @@ def try_yahoo_variants(base_ticker):
                 threads=False,
                 progress=False
             )
+
             if data is not None and not data.empty:
                 return t, data
 
@@ -80,6 +81,10 @@ def try_yahoo_variants(base_ticker):
 
     return None, None
 
+
+# ======================
+# CALCUL DES RENDEMENTS (ULTRA ROBUSTE)
+# ======================
 
 def compute_returns(base_ticker):
     yticker, data = try_yahoo_variants(base_ticker)
@@ -94,20 +99,29 @@ def compute_returns(base_ticker):
     if close.empty or len(close) < 2:
         return None, None
 
-    # ✅ ACCÈS ROBUSTE
-    last = float(close.values[-1])
+    # ✅ EXTRACTION SCALAIRE BÉTON
+    try:
+        last = float(close.to_numpy().ravel()[-1])
+    except Exception:
+        return None, None
 
     def ret(days):
         if len(close) > days:
-            prev = float(close.values[-days - 1])
-            return (last / prev - 1) * 100
+            try:
+                prev = float(close.to_numpy().ravel()[-days - 1])
+                return (last / prev - 1) * 100
+            except Exception:
+                return None
         return None
 
     if len(close) >= 252:
         y_ret = ret(252)
     else:
-        first = float(close.values[0])
-        y_ret = (last / first - 1) * 100
+        try:
+            first = float(close.to_numpy().ravel()[0])
+            y_ret = (last / first - 1) * 100
+        except Exception:
+            y_ret = None
 
     metrics = {
         "Price": safe_round(last),
