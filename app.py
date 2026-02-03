@@ -51,12 +51,12 @@ def format_price(x):
 # YAHOO HELPERS (SAFE)
 # ======================
 
-@st.cache_data(show_spinner=False, ttl=6 * 3600)  # 6 heures de cache
+@st.cache_data(show_spinner=False, ttl=6 * 3600)
 def try_yahoo_variants(base_ticker):
     variants = [
-        f"{base_ticker}.TO",  # TSX d'abord (plus stable)
-        f"{base_ticker}.V",   # TSXV ensuite
-        base_ticker           # fallback
+        f"{base_ticker}.TO",
+        f"{base_ticker}.V",
+        base_ticker
     ]
 
     for t in variants:
@@ -68,11 +68,10 @@ def try_yahoo_variants(base_ticker):
                 threads=False,
                 progress=False
             )
-            if not data.empty:
+            if data is not None and not data.empty:
                 return t, data
 
         except YFRateLimitError:
-            # STOP immédiat pour éviter un ban plus long
             time.sleep(15)
             return None, None
 
@@ -85,24 +84,30 @@ def try_yahoo_variants(base_ticker):
 def compute_returns(base_ticker):
     yticker, data = try_yahoo_variants(base_ticker)
 
-    if yticker is None or data is None:
+    if yticker is None or data is None or data.empty:
+        return None, None
+
+    if "Close" not in data.columns:
         return None, None
 
     close = data["Close"].dropna()
-    if close.empty:
+    if close.empty or len(close) < 2:
         return None, None
 
-    last = close.iloc[-1].item()
+    # ✅ ACCÈS ROBUSTE
+    last = float(close.values[-1])
 
     def ret(days):
         if len(close) > days:
-            return (last / close.iloc[-days - 1].item() - 1) * 100
+            prev = float(close.values[-days - 1])
+            return (last / prev - 1) * 100
         return None
 
     if len(close) >= 252:
         y_ret = ret(252)
     else:
-        y_ret = (last / close.iloc[0].item() - 1) * 100
+        first = float(close.values[0])
+        y_ret = (last / first - 1) * 100
 
     metrics = {
         "Price": safe_round(last),
@@ -139,6 +144,7 @@ with col2:
 
 run = st.button("🚀 Lancer le scan")
 
+
 # ======================
 # SCAN
 # ======================
@@ -159,7 +165,6 @@ if run:
             base = clean_ticker(row["Ticker"])
             yticker, metrics = compute_returns(base)
 
-            # Ralentissement INTELLIGENT : seulement si Yahoo a répondu
             if yticker is not None:
                 time.sleep(1.2)
 
@@ -181,7 +186,6 @@ if run:
         if results:
             res_df = pd.DataFrame(results)
 
-            # Forcer Y en numérique pour tri stable
             res_df["Y"] = pd.to_numeric(res_df["Y"], errors="coerce")
 
             res_df = res_df.sort_values(
